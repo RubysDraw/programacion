@@ -11,7 +11,7 @@ ARCHIVO = "tareas.csv"
 def cargar_datos():
     if os.path.exists(ARCHIVO):
         df = pd.read_csv(ARCHIVO)
-        # Compatibilidad si es CSV antiguo
+        # Compatibilidad con CSV antiguo
         if "Cumplida" not in df.columns:
             df["Cumplida"] = False
     else:
@@ -72,24 +72,32 @@ if st.sidebar.button("Guardar tarea"):
         st.sidebar.error("❌ Completa todos los campos")
 
 # --------------------------------------------------
-# Filtros
+# Filtros compactos en una fila
 # --------------------------------------------------
 st.subheader("📋 Lista de tareas")
 
-filtro_trabajador = st.selectbox(
-    "Filtrar por trabajador",
-    ["Todos"] + sorted(df["Trabajador"].dropna().unique().tolist())
-)
+col1, col2, col3 = st.columns([2, 1, 1])
 
-filtro_prioridad = st.selectbox(
-    "Filtrar por prioridad",
-    ["Todos", "Alta", "Media", "Baja"]
-)
+with col1:
+    filtro_trabajador = st.selectbox(
+        "👷 Trabajador",
+        ["Todos"] + sorted(df["Trabajador"].dropna().unique().tolist()),
+        key="filtro_trabajador"
+    )
 
-filtro_cumplida = st.selectbox(
-    "Filtrar por estado",
-    ["Todas", "Cumplidas", "No cumplidas"]
-)
+with col2:
+    filtro_prioridad = st.selectbox(
+        "⭐ Prioridad",
+        ["Todos", "Alta", "Media", "Baja"],
+        key="filtro_prioridad"
+    )
+
+with col3:
+    filtro_cumplida = st.selectbox(
+        "☑️ Estado",
+        ["Todas", "Cumplidas", "No cumplidas"],
+        key="filtro_cumplida"
+    )
 
 df_filtrado = df.copy()
 
@@ -182,4 +190,3 @@ c1, c2, c3 = st.columns(3)
 c1.metric("📋 Totales", len(df))
 c2.metric("✅ Cumplidas", len(df[df["Cumplida"] == True]))
 c3.metric("⛔ Pendientes", len(df[df["Cumplida"] == False]))
-
