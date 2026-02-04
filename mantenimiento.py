@@ -5,14 +5,14 @@ import os
 
 ARCHIVO = "tareas.csv"
 
-# ---------------------------
+# --------------------------------------------------
 # Funciones
-# ---------------------------
+# --------------------------------------------------
 def cargar_datos():
     if os.path.exists(ARCHIVO):
-        return pd.read_csv(ARCHIVO)
+        df = pd.read_csv(ARCHIVO)
     else:
-        return pd.DataFrame(columns=[
+        df = pd.DataFrame(columns=[
             "Trabajador",
             "Tarea",
             "Lugar",
@@ -21,26 +21,22 @@ def cargar_datos():
             "Prioridad",
             "Estado"
         ])
+    return df
 
 def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
-def es_vencida(fecha_entrega, estado):
-    if estado == "Completado":
-        return False
-    return pd.to_datetime(fecha_entrega).date() < date.today()
-
-# ---------------------------
+# --------------------------------------------------
 # Configuración Streamlit
-# ---------------------------
+# --------------------------------------------------
 st.set_page_config(page_title="Gestión de Mantenimiento", layout="wide")
 st.title("🔧 Sistema de Gestión de Mantenimiento")
 
 df = cargar_datos()
 
-# ---------------------------
+# --------------------------------------------------
 # Sidebar - Nueva tarea
-# ---------------------------
+# --------------------------------------------------
 st.sidebar.header("➕ Nueva tarea")
 
 trabajador = st.sidebar.text_input("👷 Trabajador")
@@ -68,9 +64,9 @@ if st.sidebar.button("Guardar tarea"):
     else:
         st.sidebar.error("❌ Completa todos los campos")
 
-# ---------------------------
+# --------------------------------------------------
 # Filtros (bloqueados)
-# ---------------------------
+# --------------------------------------------------
 st.subheader("📋 Lista de tareas")
 
 col1, col2, col3 = st.columns(3)
@@ -78,7 +74,7 @@ col1, col2, col3 = st.columns(3)
 with col1:
     filtro_trabajador = st.selectbox(
         "Filtrar por trabajador",
-        ["Todos"] + sorted(df["Trabajador"].unique().tolist())
+        ["Todos"] + sorted(df["Trabajador"].dropna().unique().tolist())
     )
 
 with col2:
@@ -104,29 +100,22 @@ if filtro_estado != "Todos":
 if filtro_prioridad != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Prioridad"] == filtro_prioridad]
 
+# --------------------------------------------------
+# Preparar datos (fechas y vencidas)
+# --------------------------------------------------
 df_filtrado = df_filtrado.reset_index()
 
-# ---------------------------
-# Marcar vencidas
-# ---------------------------
-df_filtrado["Vencida"] = df_filtrado.apply(
-    lambda x: es_vencida(x["Fecha entrega"], x["Estado"]),
-    axis=1
+df_filtrado["Fecha entrega"] = pd.to_datetime(df_filtrado["Fecha entrega"])
+
+df_filtrado["Vencida"] = (
+    (df_filtrado["Fecha entrega"].dt.date < date.today()) &
+    (df_filtrado["Estado"] != "Completado")
 )
 
-# ---------------------------
+# --------------------------------------------------
 # Tabla editable (solo Estado)
-# ---------------------------
+# --------------------------------------------------
 st.markdown("✏️ **Solo puedes modificar el estado de la tarea**")
-
-def estilo_filas(row):
-    if row["Vencida"]:
-        return ["background-color: #ffcccc"] * len(row)
-    if row["Prioridad"] == "Alta":
-        return ["background-color: #ffe6e6"] * len(row)
-    if row["Prioridad"] == "Media":
-        return ["background-color: #fff5cc"] * len(row)
-    return [""] * len(row)
 
 df_mostrar = df_filtrado.drop(columns=["Vencida"])
 
@@ -151,18 +140,24 @@ for _, fila in df_editado.iterrows():
 
 guardar_datos(df)
 
-# ---------------------------
-# Leyenda
-# ---------------------------
-st.markdown("""
-🔴 **Rojo fuerte** → Tarea vencida  
-🌸 **Rojo suave** → Prioridad alta  
-🟡 **Amarillo** → Prioridad media  
-""")
+# --------------------------------------------------
+# Indicador visual de tareas vencidas
+# --------------------------------------------------
+st.markdown("### 🔴 Tareas vencidas")
 
-# ---------------------------
+vencidas = df_filtrado[df_filtrado["Vencida"]]
+
+if len(vencidas) > 0:
+    st.dataframe(
+        vencidas.drop(columns=["Vencida", "index"]),
+        use_container_width=True
+    )
+else:
+    st.success("No hay tareas vencidas 🎉")
+
+# --------------------------------------------------
 # Eliminar tareas
-# ---------------------------
+# --------------------------------------------------
 st.subheader("🗑️ Eliminar tarea")
 
 if len(df) > 0:
@@ -180,16 +175,19 @@ if len(df) > 0:
 else:
     st.info("No hay tareas para eliminar")
 
-# ---------------------------
+# --------------------------------------------------
 # Resumen
-# ---------------------------
+# --------------------------------------------------
 st.subheader("📊 Resumen")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("🕒 Pendientes", len(df[df["Estado"] == "Pendiente"]))
 c2.metric("⚙️ En proceso", len(df[df["Estado"] == "En proceso"]))
 c3.metric("✅ Completadas", len(df[df["Estado"] == "Completado"]))
-c4.metric("⛔ Vencidas", len(df[
-    (df["Estado"] != "Completado") &
-    (pd.to_datetime(df["Fecha entrega"]).dt.date < date.today())
-]))
+c4.metric(
+    "⛔ Vencidas",
+    len(df[
+        (df["Estado"] != "Completado") &
+        (pd.to_datetime(df["Fecha entrega"]).dt.date < date.today())
+    ])
+)
