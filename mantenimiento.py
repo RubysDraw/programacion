@@ -31,26 +31,6 @@ def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
 # --------------------------------------------------
-# Función de estilo para la tabla editable
-# --------------------------------------------------
-def resaltar_filas(df):
-    colores = []
-    for _, fila in df.iterrows():
-        if fila["Cumplida"]:
-            colores.append(["background-color: #d4edda"]*len(fila))  # verde claro
-        elif pd.to_datetime(fila["Fecha entrega"]).date() < date.today():
-            colores.append(["background-color: #f8d7da"]*len(fila))  # rojo claro
-        else:
-            # Colores por prioridad
-            if fila["Prioridad"] == "Alta":
-                colores.append(["background-color: #f8d7da"]*len(fila))  # rojo
-            elif fila["Prioridad"] == "Media":
-                colores.append(["background-color: #fff3cd"]*len(fila))  # amarillo
-            else:
-                colores.append(["background-color: #d1ecf1"]*len(fila))  # azul/verde claro
-    return pd.DataFrame(colores, index=df.index, columns=df.columns)
-
-# --------------------------------------------------
 # Configuración de la app
 # --------------------------------------------------
 st.set_page_config("Gestión de Mantenimiento", layout="wide")
@@ -128,7 +108,7 @@ elif filtro_cumplida == "No":
 df_filtrado = df_filtrado.reset_index(drop=False)
 
 # --------------------------------------------------
-# Tabla editable con colores
+# Tabla editable (solo Cumplida)
 # --------------------------------------------------
 st.markdown("☑️ **Marca la tarea como cumplida**")
 df_editor = st.data_editor(
@@ -152,18 +132,12 @@ df_editor = st.data_editor(
     key="tabla"
 )
 
-# Guardar cambios
+# Guardar cambios automáticamente
 if not df_editor.equals(df_filtrado):
     for _, fila in df_editor.iterrows():
         df.loc[fila["index"], "Cumplida"] = fila["Cumplida"]
     guardar_datos(df)
     st.success("💾 Cambios guardados")
-
-# --------------------------------------------------
-# Aplicar colores directamente en la tabla editable
-# --------------------------------------------------
-df["Fecha entrega"] = pd.to_datetime(df["Fecha entrega"], errors="coerce")
-st.dataframe(df.style.apply(resaltar_filas, axis=None), use_container_width=True)
 
 # --------------------------------------------------
 # Eliminar tarea
