@@ -11,9 +11,12 @@ ARCHIVO = "tareas.csv"
 def cargar_datos():
     if os.path.exists(ARCHIVO):
         df = pd.read_csv(ARCHIVO)
-        # Compatibilidad con CSV antiguo
+        # Compatibilidad si el CSV es viejo
         if "Cumplida" not in df.columns:
             df["Cumplida"] = False
+        # Eliminar columna Estado si existiera
+        if "Estado" in df.columns:
+            df = df.drop(columns=["Estado"])
     else:
         df = pd.DataFrame(columns=[
             "Trabajador",
@@ -72,7 +75,7 @@ if st.sidebar.button("Guardar tarea"):
         st.sidebar.error("❌ Completa todos los campos")
 
 # --------------------------------------------------
-# Filtros compactos en una fila
+# Filtros compactos en fila
 # --------------------------------------------------
 st.subheader("📋 Lista de tareas")
 
@@ -94,8 +97,8 @@ with col2:
 
 with col3:
     filtro_cumplida = st.selectbox(
-        "☑️ Estado",
-        ["Todas", "Cumplidas", "No cumplidas"],
+        "☑️ Cumplida",
+        ["Todas", "Sí", "No"],
         key="filtro_cumplida"
     )
 
@@ -107,15 +110,15 @@ if filtro_trabajador != "Todos":
 if filtro_prioridad != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Prioridad"] == filtro_prioridad]
 
-if filtro_cumplida == "Cumplidas":
+if filtro_cumplida == "Sí":
     df_filtrado = df_filtrado[df_filtrado["Cumplida"] == True]
-elif filtro_cumplida == "No cumplidas":
+elif filtro_cumplida == "No":
     df_filtrado = df_filtrado[df_filtrado["Cumplida"] == False]
 
 df_filtrado = df_filtrado.reset_index(drop=False)
 
 # --------------------------------------------------
-# Tabla principal editable (solo Cumplida)
+# Tabla editable (solo Cumplida)
 # --------------------------------------------------
 st.markdown("☑️ **Marca la tarea como cumplida cuando esté terminada**")
 
