@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import os
-from io import BytesIO
 
 ARCHIVO = "tareas.csv"
 
@@ -19,16 +18,17 @@ def cargar_datos():
             "Lugar",
             "Fecha creación",
             "Fecha entrega",
+            "Prioridad",
             "Estado"
         ])
 
 def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
-def exportar_excel(df):
-    buffer = BytesIO()
-    df.to_excel(buffer, index=False, engine="openpyxl")
-    return buffer.getvalue()
+def es_vencida(fecha_entrega, estado):
+    if estado == "Completado":
+        return False
+    return pd.to_datetime(fecha_entrega).date() < date.today()
 
 # ---------------------------
 # Configuración Streamlit
@@ -47,6 +47,7 @@ trabajador = st.sidebar.text_input("👷 Trabajador")
 tarea = st.sidebar.text_area("📝 Tarea")
 lugar = st.sidebar.text_input("📍 Lugar")
 fecha_entrega = st.sidebar.date_input("📅 Fecha entrega", min_value=date.today())
+prioridad = st.sidebar.selectbox("⭐ Prioridad", ["Alta", "Media", "Baja"])
 estado = st.sidebar.selectbox("📌 Estado", ["Pendiente", "En proceso", "Completado"])
 
 if st.sidebar.button("Guardar tarea"):
@@ -57,6 +58,7 @@ if st.sidebar.button("Guardar tarea"):
             "Lugar": lugar,
             "Fecha creación": date.today(),
             "Fecha entrega": fecha_entrega,
+            "Prioridad": prioridad,
             "Estado": estado
         }
         df = pd.concat([df, pd.DataFrame([nueva])], ignore_index=True)
@@ -71,7 +73,7 @@ if st.sidebar.button("Guardar tarea"):
 # ---------------------------
 st.subheader("📋 Lista de tareas")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     filtro_trabajador = st.selectbox(
@@ -85,6 +87,12 @@ with col2:
         ["Todos", "Pendiente", "En proceso", "Completado"]
     )
 
+with col3:
+    filtro_prioridad = st.selectbox(
+        "Filtrar por prioridad",
+        ["Todos", "Alta", "Media", "Baja"]
+    )
+
 df_filtrado = df.copy()
 
 if filtro_trabajador != "Todos":
@@ -93,22 +101,45 @@ if filtro_trabajador != "Todos":
 if filtro_estado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Estado"] == filtro_estado]
 
+if filtro_prioridad != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["Prioridad"] == filtro_prioridad]
+
 df_filtrado = df_filtrado.reset_index()
+
+# ---------------------------
+# Marcar vencidas
+# ---------------------------
+df_filtrado["Vencida"] = df_filtrado.apply(
+    lambda x: es_vencida(x["Fecha entrega"], x["Estado"]),
+    axis=1
+)
 
 # ---------------------------
 # Tabla editable (solo Estado)
 # ---------------------------
 st.markdown("✏️ **Solo puedes modificar el estado de la tarea**")
 
+def estilo_filas(row):
+    if row["Vencida"]:
+        return ["background-color: #ffcccc"] * len(row)
+    if row["Prioridad"] == "Alta":
+        return ["background-color: #ffe6e6"] * len(row)
+    if row["Prioridad"] == "Media":
+        return ["background-color: #fff5cc"] * len(row)
+    return [""] * len(row)
+
+df_mostrar = df_filtrado.drop(columns=["Vencida"])
+
 df_editado = st.data_editor(
-    df_filtrado,
+    df_mostrar,
     disabled=[
         "index",
         "Trabajador",
         "Tarea",
         "Lugar",
         "Fecha creación",
-        "Fecha entrega"
+        "Fecha entrega",
+        "Prioridad"
     ],
     use_container_width=True,
     key="editor"
@@ -119,6 +150,15 @@ for _, fila in df_editado.iterrows():
     df.loc[fila["index"], "Estado"] = fila["Estado"]
 
 guardar_datos(df)
+
+# ---------------------------
+# Leyenda
+# ---------------------------
+st.markdown("""
+🔴 **Rojo fuerte** → Tarea vencida  
+🌸 **Rojo suave** → Prioridad alta  
+🟡 **Amarillo** → Prioridad media  
+""")
 
 # ---------------------------
 # Eliminar tareas
@@ -141,23 +181,15 @@ else:
     st.info("No hay tareas para eliminar")
 
 # ---------------------------
-# Exportar Excel
-# ---------------------------
-st.subheader("📤 Exportar")
-
-st.download_button(
-    label="📊 Descargar Excel",
-    data=exportar_excel(df_filtrado.drop(columns=["index"])),
-    file_name="tareas_mantenimiento.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-# ---------------------------
 # Resumen
 # ---------------------------
 st.subheader("📊 Resumen")
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("🕒 Pendientes", len(df[df["Estado"] == "Pendiente"]))
 c2.metric("⚙️ En proceso", len(df[df["Estado"] == "En proceso"]))
 c3.metric("✅ Completadas", len(df[df["Estado"] == "Completado"]))
+c4.metric("⛔ Vencidas", len(df[
+    (df["Estado"] != "Completado") &
+    (pd.to_datetime(df["Fecha entrega"]).dt.date < date.today())
+]))
