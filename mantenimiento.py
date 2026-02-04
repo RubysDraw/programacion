@@ -11,7 +11,7 @@ ARCHIVO = "tareas.csv"
 def cargar_datos():
     if os.path.exists(ARCHIVO):
         df = pd.read_csv(ARCHIVO)
-        # Compatibilidad por si el CSV es viejo
+        # Compatibilidad si es CSV antiguo
         if "Cumplida" not in df.columns:
             df["Cumplida"] = False
     else:
@@ -30,7 +30,7 @@ def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
 # --------------------------------------------------
-# Configuración
+# Configuración de la app
 # --------------------------------------------------
 st.set_page_config("Gestión de Mantenimiento", layout="wide")
 st.title("🔧 Sistema de Gestión de Mantenimiento")
@@ -62,7 +62,14 @@ if st.sidebar.button("Guardar tarea"):
         df = pd.concat([df, pd.DataFrame([nueva])], ignore_index=True)
         guardar_datos(df)
         st.sidebar.success("✅ Tarea creada")
-        st.experimental_rerun()
+        # Limpiar inputs
+        trabajador = ""
+        tarea = ""
+        lugar = ""
+        fecha_entrega = date.today()
+        prioridad = "Media"
+    else:
+        st.sidebar.error("❌ Completa todos los campos")
 
 # --------------------------------------------------
 # Filtros
@@ -94,14 +101,13 @@ if filtro_prioridad != "Todos":
 
 if filtro_cumplida == "Cumplidas":
     df_filtrado = df_filtrado[df_filtrado["Cumplida"] == True]
-
-if filtro_cumplida == "No cumplidas":
+elif filtro_cumplida == "No cumplidas":
     df_filtrado = df_filtrado[df_filtrado["Cumplida"] == False]
 
-df_filtrado = df_filtrado.reset_index()
+df_filtrado = df_filtrado.reset_index(drop=False)
 
 # --------------------------------------------------
-# Tabla principal (checkbox Cumplida)
+# Tabla principal editable (solo Cumplida)
 # --------------------------------------------------
 st.markdown("☑️ **Marca la tarea como cumplida cuando esté terminada**")
 
@@ -126,7 +132,7 @@ df_editor = st.data_editor(
     key="tabla"
 )
 
-# Guardar cambios
+# Guardar cambios automáticamente
 if not df_editor.equals(df_filtrado):
     for _, fila in df_editor.iterrows():
         df.loc[fila["index"], "Cumplida"] = fila["Cumplida"]
@@ -166,7 +172,6 @@ if len(df) > 0:
         df = df.drop(fila_eliminar).reset_index(drop=True)
         guardar_datos(df)
         st.success("Tarea eliminada")
-        st.experimental_rerun()
 
 # --------------------------------------------------
 # Resumen
@@ -177,3 +182,4 @@ c1, c2, c3 = st.columns(3)
 c1.metric("📋 Totales", len(df))
 c2.metric("✅ Cumplidas", len(df[df["Cumplida"] == True]))
 c3.metric("⛔ Pendientes", len(df[df["Cumplida"] == False]))
+
