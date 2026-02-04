@@ -11,10 +11,8 @@ ARCHIVO = "tareas.csv"
 def cargar_datos():
     if os.path.exists(ARCHIVO):
         df = pd.read_csv(ARCHIVO)
-        # Compatibilidad si el CSV es viejo
         if "Cumplida" not in df.columns:
             df["Cumplida"] = False
-        # Eliminar columna Estado si existiera
         if "Estado" in df.columns:
             df = df.drop(columns=["Estado"])
     else:
@@ -33,6 +31,26 @@ def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
 # --------------------------------------------------
+# Función de estilo para la tabla editable
+# --------------------------------------------------
+def resaltar_filas(df):
+    colores = []
+    for _, fila in df.iterrows():
+        if fila["Cumplida"]:
+            colores.append(["background-color: #d4edda"]*len(fila))  # verde claro
+        elif pd.to_datetime(fila["Fecha entrega"]).date() < date.today():
+            colores.append(["background-color: #f8d7da"]*len(fila))  # rojo claro
+        else:
+            # Colores por prioridad
+            if fila["Prioridad"] == "Alta":
+                colores.append(["background-color: #f8d7da"]*len(fila))  # rojo
+            elif fila["Prioridad"] == "Media":
+                colores.append(["background-color: #fff3cd"]*len(fila))  # amarillo
+            else:
+                colores.append(["background-color: #d1ecf1"]*len(fila))  # azul/verde claro
+    return pd.DataFrame(colores, index=df.index, columns=df.columns)
+
+# --------------------------------------------------
 # Configuración de la app
 # --------------------------------------------------
 st.set_page_config("Gestión de Mantenimiento", layout="wide")
@@ -44,7 +62,6 @@ df = cargar_datos()
 # Sidebar - Nueva tarea
 # --------------------------------------------------
 st.sidebar.header("➕ Nueva tarea")
-
 trabajador = st.sidebar.text_input("👷 Trabajador")
 tarea = st.sidebar.text_area("📝 Tarea")
 lugar = st.sidebar.text_input("📍 Lugar")
@@ -65,7 +82,6 @@ if st.sidebar.button("Guardar tarea"):
         df = pd.concat([df, pd.DataFrame([nueva])], ignore_index=True)
         guardar_datos(df)
         st.sidebar.success("✅ Tarea creada")
-        # Limpiar inputs
         trabajador = ""
         tarea = ""
         lugar = ""
@@ -78,8 +94,7 @@ if st.sidebar.button("Guardar tarea"):
 # Filtros compactos en fila
 # --------------------------------------------------
 st.subheader("📋 Lista de tareas")
-
-col1, col2, col3 = st.columns([2, 1, 1])
+col1, col2, col3 = st.columns([2,1,1])
 
 with col1:
     filtro_trabajador = st.selectbox(
@@ -87,14 +102,12 @@ with col1:
         ["Todos"] + sorted(df["Trabajador"].dropna().unique().tolist()),
         key="filtro_trabajador"
     )
-
 with col2:
     filtro_prioridad = st.selectbox(
         "⭐ Prioridad",
         ["Todos", "Alta", "Media", "Baja"],
         key="filtro_prioridad"
     )
-
 with col3:
     filtro_cumplida = st.selectbox(
         "☑️ Cumplida",
@@ -103,13 +116,10 @@ with col3:
     )
 
 df_filtrado = df.copy()
-
 if filtro_trabajador != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Trabajador"] == filtro_trabajador]
-
 if filtro_prioridad != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Prioridad"] == filtro_prioridad]
-
 if filtro_cumplida == "Sí":
     df_filtrado = df_filtrado[df_filtrado["Cumplida"] == True]
 elif filtro_cumplida == "No":
@@ -118,10 +128,9 @@ elif filtro_cumplida == "No":
 df_filtrado = df_filtrado.reset_index(drop=False)
 
 # --------------------------------------------------
-# Tabla editable (solo Cumplida)
+# Tabla editable con colores
 # --------------------------------------------------
-st.markdown("☑️ **Marca la tarea como cumplida cuando esté terminada**")
-
+st.markdown("☑️ **Marca la tarea como cumplida**")
 df_editor = st.data_editor(
     df_filtrado,
     disabled=[
@@ -143,7 +152,7 @@ df_editor = st.data_editor(
     key="tabla"
 )
 
-# Guardar cambios automáticamente
+# Guardar cambios
 if not df_editor.equals(df_filtrado):
     for _, fila in df_editor.iterrows():
         df.loc[fila["index"], "Cumplida"] = fila["Cumplida"]
@@ -151,34 +160,21 @@ if not df_editor.equals(df_filtrado):
     st.success("💾 Cambios guardados")
 
 # --------------------------------------------------
-# Tareas vencidas
+# Aplicar colores directamente en la tabla editable
 # --------------------------------------------------
-st.subheader("🔴 Tareas vencidas")
-
 df["Fecha entrega"] = pd.to_datetime(df["Fecha entrega"], errors="coerce")
-
-vencidas = df[
-    (df["Cumplida"] == False) &
-    (df["Fecha entrega"].dt.date < date.today())
-]
-
-if len(vencidas) > 0:
-    st.dataframe(vencidas, use_container_width=True)
-else:
-    st.success("No hay tareas vencidas 🎉")
+st.dataframe(df.style.apply(resaltar_filas, axis=None), use_container_width=True)
 
 # --------------------------------------------------
 # Eliminar tarea
 # --------------------------------------------------
 st.subheader("🗑️ Eliminar tarea")
-
 if len(df) > 0:
     fila_eliminar = st.selectbox(
         "Selecciona la tarea",
         df.index,
         format_func=lambda x: f"{df.loc[x, 'Trabajador']} | {df.loc[x, 'Tarea']}"
     )
-
     if st.button("❌ Eliminar tarea"):
         df = df.drop(fila_eliminar).reset_index(drop=True)
         guardar_datos(df)
@@ -188,7 +184,6 @@ if len(df) > 0:
 # Resumen
 # --------------------------------------------------
 st.subheader("📊 Resumen")
-
 c1, c2, c3 = st.columns(3)
 c1.metric("📋 Totales", len(df))
 c2.metric("✅ Cumplidas", len(df[df["Cumplida"] == True]))
