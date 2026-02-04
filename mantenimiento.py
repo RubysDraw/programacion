@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import os
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from io import BytesIO
 
 ARCHIVO = "tareas.csv"
 
@@ -26,27 +25,15 @@ def cargar_datos():
 def guardar_datos(df):
     df.to_csv(ARCHIVO, index=False)
 
-def exportar_pdf(df):
-    c = canvas.Canvas("tareas_mantenimiento.pdf", pagesize=A4)
-    text = c.beginText(40, 800)
-    text.setFont("Helvetica", 9)
-
-    for i, row in df.iterrows():
-        linea = f"{row['Trabajador']} | {row['Tarea']} | {row['Lugar']} | {row['Fecha entrega']} | {row['Estado']}"
-        text.textLine(linea)
-        if text.getY() < 40:
-            c.drawText(text)
-            c.showPage()
-            text = c.beginText(40, 800)
-            text.setFont("Helvetica", 9)
-
-    c.drawText(text)
-    c.save()
+def exportar_excel(df):
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, engine="openpyxl")
+    return buffer.getvalue()
 
 # ---------------------------
-# Configuración
+# Configuración Streamlit
 # ---------------------------
-st.set_page_config("Gestión de Mantenimiento", layout="wide")
+st.set_page_config(page_title="Gestión de Mantenimiento", layout="wide")
 st.title("🔧 Sistema de Gestión de Mantenimiento")
 
 df = cargar_datos()
@@ -75,11 +62,14 @@ if st.sidebar.button("Guardar tarea"):
         df = pd.concat([df, pd.DataFrame([nueva])], ignore_index=True)
         guardar_datos(df)
         st.sidebar.success("✅ Tarea creada")
+        st.experimental_rerun()
+    else:
+        st.sidebar.error("❌ Completa todos los campos")
 
 # ---------------------------
-# Filtros (NO editables)
+# Filtros (bloqueados)
 # ---------------------------
-st.subheader("📋 Tareas")
+st.subheader("📋 Lista de tareas")
 
 col1, col2 = st.columns(2)
 
@@ -103,22 +93,31 @@ if filtro_trabajador != "Todos":
 if filtro_estado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Estado"] == filtro_estado]
 
-df_filtrado = df_filtrado.reset_index(drop=True)
+df_filtrado = df_filtrado.reset_index()
 
 # ---------------------------
-# Editor de tabla (solo Estado editable)
+# Tabla editable (solo Estado)
 # ---------------------------
-st.markdown("✏️ **Solo puedes cambiar el estado**")
+st.markdown("✏️ **Solo puedes modificar el estado de la tarea**")
 
 df_editado = st.data_editor(
     df_filtrado,
-    disabled=["Trabajador", "Tarea", "Lugar", "Fecha creación", "Fecha entrega"],
+    disabled=[
+        "index",
+        "Trabajador",
+        "Tarea",
+        "Lugar",
+        "Fecha creación",
+        "Fecha entrega"
+    ],
     use_container_width=True,
     key="editor"
 )
 
 # Guardar cambios de estado
-df.update(df_editado)
+for _, fila in df_editado.iterrows():
+    df.loc[fila["index"], "Estado"] = fila["Estado"]
+
 guardar_datos(df)
 
 # ---------------------------
@@ -126,43 +125,39 @@ guardar_datos(df)
 # ---------------------------
 st.subheader("🗑️ Eliminar tarea")
 
-fila_eliminar = st.selectbox(
-    "Selecciona la tarea a eliminar",
-    df.index,
-    format_func=lambda x: f"{df.loc[x, 'Trabajador']} - {df.loc[x, 'Tarea']}"
-)
+if len(df) > 0:
+    fila_eliminar = st.selectbox(
+        "Selecciona la tarea",
+        df.index,
+        format_func=lambda x: f"{df.loc[x, 'Trabajador']} | {df.loc[x, 'Tarea']}"
+    )
 
-if st.button("❌ Eliminar tarea"):
-    df = df.drop(fila_eliminar).reset_index(drop=True)
-    guardar_datos(df)
-    st.success("Tarea eliminada")
-    st.experimental_rerun()
+    if st.button("❌ Eliminar tarea"):
+        df = df.drop(fila_eliminar).reset_index(drop=True)
+        guardar_datos(df)
+        st.success("Tarea eliminada")
+        st.experimental_rerun()
+else:
+    st.info("No hay tareas para eliminar")
 
 # ---------------------------
-# Exportar
+# Exportar Excel
 # ---------------------------
 st.subheader("📤 Exportar")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.download_button(
-        "📊 Descargar Excel",
-        data=df_filtrado.to_excel(index=False, engine="openpyxl"),
-        file_name="tareas_mantenimiento.xlsx"
-    )
-
-with col2:
-    if st.button("📄 Generar PDF"):
-        exportar_pdf(df_filtrado)
-        st.success("PDF generado: tareas_mantenimiento.pdf")
+st.download_button(
+    label="📊 Descargar Excel",
+    data=exportar_excel(df_filtrado.drop(columns=["index"])),
+    file_name="tareas_mantenimiento.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # ---------------------------
 # Resumen
 # ---------------------------
 st.subheader("📊 Resumen")
-c1, c2, c3 = st.columns(3)
 
-c1.metric("Pendientes", len(df[df["Estado"] == "Pendiente"]))
-c2.metric("En proceso", len(df[df["Estado"] == "En proceso"]))
-c3.metric("Completadas", len(df[df["Estado"] == "Completado"]))
+c1, c2, c3 = st.columns(3)
+c1.metric("🕒 Pendientes", len(df[df["Estado"] == "Pendiente"]))
+c2.metric("⚙️ En proceso", len(df[df["Estado"] == "En proceso"]))
+c3.metric("✅ Completadas", len(df[df["Estado"] == "Completado"]))
